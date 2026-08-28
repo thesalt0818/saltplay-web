@@ -337,35 +337,52 @@ Supabase 의 `game_plays` 로 옮기고, 로그인하지 않은 사람에게는 
 - 전체화면 상태는 `fullscreenchange` 를 구독해서 따라간다. Esc 나 기기 버튼으로
   빠져나가도 버튼 표시가 실제 상태와 어긋나지 않아야 한다.
 
-### 음소거는 절반만 우리 손에 있다
+### 음소거는 게임이 받아 줘야 동작한다
 
 iframe 안은 남의 페이지라 마음대로 만질 수 없다. 두 가지를 함께 시도한다.
 
 1. **같은 출처면 직접 끈다** — 안의 `<audio>`/`<video>` 를 만진다.
    배포 주소(`thesalt0818.github.io/saltplay-web`)와 게임 주소
-   (`thesalt0818.github.io/...`)는 **같은 출처라 이게 동작한다.**
-   ⚠️ 단, 개발 중(`localhost`)에는 다른 출처라 이 경로가 막힌다 — 로컬에서 음소거가
-   안 되는 것은 고장이 아니다. 그리고 `thesalt0225.github.io` 에 있는 게임처럼
-   계정이 다른 것도 막힌다.
-2. **게임에 메시지를 보낸다** — Cocos 는 소리를 Web Audio 로 내는데 그건 밖에서 끌
-   방법이 아예 없다. 게임 쪽이 받아서 스스로 꺼 줘야 한다.
+   (`thesalt0818.github.io/...`)는 같은 출처라 이 경로가 열린다.
+   ⚠️ 그런데 **Cocos 게임에는 `<audio>` 태그가 아예 없다** — 소리를 Web Audio 로 내기
+   때문이다. 그래서 이 방법은 실질적으로 헛일이고, 실제로 소리를 끄는 것은 2번이다.
+2. **게임에 `saltplay:mute` 메시지를 보낸다** — Web Audio 소리는 밖에서 끌 방법이
+   아예 없다. 게임 쪽이 받아서 스스로 꺼 줘야 한다. `postMessage` 는 출처가 달라도
+   오가므로 **개발 중(`localhost`)에도 동작한다.**
 
-**게임 프로젝트(Cocos)에 이 코드를 넣으면 음소거가 완전히 동작한다:**
+**Toy Slots(`slotclicker`)에는 넣었고 실제로 동작한다.** 구현은 게임 프로젝트
+(`D:\Cocos_project\SlotClicker`)의 `assets/script/ui/SoundManager.ts` 안
+`setExternalMute()` · `_bindHostBridge()` 다. **나머지 게임에는 아직 없어서 그쪽은
+음소거 버튼을 눌러도 소리가 계속 난다.**
+
+⚠️ **iframe 의 `load` 는 게임 엔진이 부팅되기 전에 끝난다.** 그때 보낸 음소거 명령은
+게임이 받을 준비가 안 돼서 그냥 사라진다 — "음소거를 켜 둔 채로 게임을 열면 소리가
+난다"가 된다. 그래서 게임이 준비를 마치면 `saltplay:ready` 를 부모에게 보내고,
+포털이 그걸 받아 현재 상태를 다시 보낸다(`game-player.tsx`).
+
+⚠️ **게임 안의 사운드 설정을 덮어쓰지 않는다.** 포털의 음소거는 게임 설정과 **별개
+플래그**로 두고 소리를 내는 자리에서 함께 검사한다. 게임 안 설정을 직접 끄면 음소거를
+푼 뒤에 플레이어가 게임에서 정해 둔 설정이 사라진다.
+
+⚠️ **게임을 다시 배포하면 `games.json` 세 곳의 `version` 을 올린다.** 안 올리면
+브라우저가 옛 파일을 물고 있어 고친 것이 반영되지 않는다(5절).
+
+**새 게임(Cocos 3.x)에 넣을 코드의 뼈대:**
 
 ```js
 // 게임의 시작 스크립트에 한 번만 넣는다.
 window.addEventListener("message", (event) => {
-  // 우리 사이트에서 온 것만 받는다.
+  // 우리 사이트에서 온 것만 받는다 (개발 중이면 localhost 도 함께 허용).
   if (event.origin !== "https://thesalt0818.github.io") return;
   if (event.data?.type !== "saltplay:mute") return;
 
-  // Cocos Creator 2.x
-  cc.audioEngine.setVolume?.(event.data.muted ? 0 : 1);
-  // Cocos Creator 3.x 라면 AudioSource 의 volume 을 바꾸거나 mute 플래그를 쓴다.
+  // Cocos 3.x 에는 전역 음소거가 없다. 울리고 있는 AudioSource 를 멈추고,
+  // 새로 나려는 소리를 막는 플래그를 세운다 (SoundManager.setExternalMute 참고).
 });
-```
 
-이 코드를 넣기 전까지는 음소거가 **게임에 따라 듣지 않을 수 있다.**
+// 준비가 끝났음을 알린다 — 포털이 현재 음소거 상태를 다시 보내 준다.
+window.parent?.postMessage({ type: "saltplay:ready" }, "*");
+```
 
 ---
 

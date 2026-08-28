@@ -161,6 +161,27 @@ export function GamePlayer({ game }: { game: Game }) {
     applyMute(next);
   };
 
+  /**
+   * 게임이 "준비됐다"고 알려 오면 지금 음소거 상태를 다시 보낸다.
+   *
+   * ⚠️ iframe 의 `load` 는 **게임 엔진이 부팅되기 전에** 끝난다. 그때 보낸 음소거
+   * 명령은 게임이 아직 받을 준비가 안 돼서 그냥 사라진다. 그래서 게임 쪽이
+   * 준비를 마치고 `saltplay:ready` 를 보내 오면 여기서 한 번 더 보낸다.
+   */
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      // 우리가 띄운 게임에서 온 것만 받는다
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if ((event.data as { type?: string } | null)?.type !== "saltplay:ready") {
+        return;
+      }
+      applyMute(muted);
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [applyMute, muted]);
+
   /* ── 전체화면 ────────────────────────────────────────────────────────── */
 
   // 화면을 덮는 동안에는 뒤 페이지가 따라 스크롤되지 않아야 한다.
