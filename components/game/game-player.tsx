@@ -62,8 +62,50 @@ export function GamePlayer({ game }: { game: Game }) {
    */
   const [immersive, setImmersive] = useState(false);
 
+  /** 손가락으로 쓰는 기기인가. 화면 폭이 아니라 입력 방식으로 판단한다. */
+  const [touchDevice, setTouchDevice] = useState(false);
+  /** 지금 기기가 세로로 들려 있는가. */
+  const [viewportPortrait, setViewportPortrait] = useState(true);
+
   // 가로 게임인지. 'sensor'(기기에 맡김)는 가로로 본다 — 대부분 가로가 기본이다.
   const landscape = game.orientation !== "portrait";
+
+  // 기기 종류와 지금 방향을 지켜본다.
+  // 서버에서는 알 수 없으므로 화면이 뜬 뒤에 읽는다.
+  useEffect(() => {
+    setTouchDevice(window.matchMedia("(pointer: coarse)").matches);
+
+    const query = window.matchMedia("(orientation: portrait)");
+    const update = () => setViewportPortrait(query.matches);
+
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  /**
+   * 게임을 90° 돌려서 그려야 하는가.
+   *
+   * ## 왜 이런 게 필요한가
+   *
+   * `screen.orientation.lock()` 은 **브라우저 전체화면이 성공했을 때만** 동작한다.
+   * iOS 사파리는 그 전체화면 자체가 없으니 잠금도 걸리지 않는다. 그래서 자동 회전이
+   * 켜진 폰을 눕히면 세로 게임이 같이 누워 버린다.
+   *
+   * 막을 수 없다면 **거꾸로 돌려서 되돌린다.** 화면이 가로가 됐는데 게임이 세로여야
+   * 하면, 게임을 90° 돌려 그린다. 사용자가 폰을 돌린 만큼 화면 안에서 되돌아가므로
+   * 눈에는 그대로 세로로 보인다 — 회전이 잠긴 것과 같은 결과다.
+   *
+   * ## 조건이 좁은 이유
+   *
+   * - 전체화면(`immersive`)일 때만. 평소 페이지에서 돌리면 글이 다 누워 버린다.
+   * - 손가락 기기에서만. PC 창은 대부분 가로라, 세로 게임을 열 때마다 화면 전체가
+   *   돌아가 버린다.
+   */
+  const rotated =
+    immersive &&
+    touchDevice &&
+    (landscape ? viewportPortrait : !viewportPortrait);
 
   /** 게임을 실제로 띄운다. '계속 플레이하기'에 쌓이는 시점도 여기다. */
   const start = useCallback(() => {
@@ -258,7 +300,8 @@ export function GamePlayer({ game }: { game: Game }) {
             "[&:fullscreen]:aspect-auto [&:fullscreen]:h-full [&:fullscreen]:w-full [&:fullscreen]:max-h-none [&:fullscreen]:rounded-none",
             immersive
               ? // 우리가 직접 화면을 덮는 경우. 헤더(z-40)보다 위에 있어야 한다.
-                "fixed inset-0 z-[60] h-full w-full"
+                // 크기는 아래 style 에서 정한다(돌려야 할 때 가로세로가 뒤바뀐다).
+                "fixed z-[60]"
               : [
                   "rounded-xl",
                   landscape
@@ -270,6 +313,23 @@ export function GamePlayer({ game }: { game: Game }) {
                       "aspect-[3/4] w-full sm:h-[calc(100dvh-13rem)] sm:max-h-[700px] sm:w-auto",
                 ],
           )}
+          style={
+            immersive
+              ? rotated
+                ? {
+                    // 화면을 90° 돌려서 채운다.
+                    // 가로세로를 뒤바꾼 상자를 왼쪽 위 모서리 기준으로 돌리고,
+                    // 오른쪽 끝(100dvw)에서 시작하게 두면 화면에 딱 맞아떨어진다.
+                    top: 0,
+                    left: "100dvw",
+                    width: "100dvh",
+                    height: "100dvw",
+                    transformOrigin: "0 0",
+                    transform: "rotate(90deg)",
+                  }
+                : { top: 0, left: 0, width: "100dvw", height: "100dvh" }
+              : undefined
+          }
         >
           {started ? (
             <iframe
