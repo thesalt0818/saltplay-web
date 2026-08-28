@@ -1,0 +1,97 @@
+{
+  "games": [
+    {
+      "id": "slotclicker",
+      "title": "Toy Slots",
+      "description": "방치형 슬롯머신 클리커",
+      "url": "https://thesalt0818.github.io/slotclicker/",
+      "version": "20260819",
+      "orientation": "portrait",
+      "thumbnail": "gameicon/toyslot_icon",
+      "accent": "#E8A33D",
+      "tags": ["hot", "idle", "casual"]
+    },
+    {
+      "id": "elpissurvival",
+      "title": "Elpis Survival",
+      "description": "생존 액션 게임",
+      "url": "https://thesalt0818.github.io/elpissurvival/",
+      "version": "20260611",
+      "orientation": "portrait",
+      "thumbnail": "gameicon/elpis_icon",
+      "accent": "#5B7FDE",
+      "tags": ["hot", "action"]
+    },
+    {
+      "id": "candycan",
+      "title": "Candy Can",
+      "description": "머지 수박 게임",
+      "url": "https://thesalt0225.github.io/candycanWtest/",
+      "version": "20260715",
+      "orientation": "portrait",
+      "thumbnail": "gameicon/candycan_icon",
+      "accent": "#5B7FDE",
+      "tags": ["casual", "puzzle"]
+    },
+    {
+      "id": "catguardians",
+      "title": "Cat Guardians",
+      "description": "방치형 시뮬레이션 게임",
+      "url": "https://thesalt0818.github.io/catguardians/",
+      "version": "20260821",
+      "orientation": "portrait",
+      "thumbnail": "gameicon/catguardians_icon",
+      "accent": "#5B7FDE",
+      "tags": ["idle", "simulation", "casual"]
+    },
+
+    {
+      "id": "adult01",
+      "title": "섹시 블리드",
+      "description": "주소가 아직 임시입니다 — 실제 게임 주소로 바꿔 주세요",
+      "url": "https://thesalt0818.github.io/saltplay/",
+      "version": "",
+      "orientation": "portrait",
+      "thumbnail": "gameicon_adult/game01_icon_adult",
+      "accent": "#C93A47",
+      "tags": ["hot", "simulation"],
+      "audience": "adult"
+    },
+    {
+      "id": "adult02",
+      "title": "탑 오브 유혹",
+      "description": "주소가 아직 임시입니다 — 실제 게임 주소로 바꿔 주세요",
+      "url": "https://thesalt0818.github.io/saltplay/",
+      "version": "",
+      "orientation": "portrait",
+      "thumbnail": "gameicon_adult/game02_icon_adult",
+      "accent": "#C93A47",
+      "tags": ["hot", "action"],
+      "audience": "adult"
+    },
+    {
+      "id": "adult03",
+      "title": "나이트 퀸",
+      "description": "주소가 아직 임시입니다 — 실제 게임 주소로 바꿔 주세요",
+      "url": "https://thesalt0818.github.io/saltplay/",
+      "version": "",
+      "orientation": "portrait",
+      "thumbnail": "gameicon_adult/game03_icon_adult",
+      "accent": "#C93A47",
+      "tags": ["casual", "puzzle"],
+      "audience": "adult"
+    },
+    {
+      "id": "adult04",
+      "title": "뜨거운 도시",
+      "description": "주소가 아직 임시입니다 — 실제 게임 주소로 바꿔 주세요",
+      "url": "https://thesalt0818.github.io/saltplay/",
+      "version": "",
+      "orientation": "portrait",
+      "thumbnail": "gameicon_adult/game04_icon_adult",
+      "accent": "#C93A47",
+      "tags": ["idle", "simulation"],
+      "audience": "adult"
+    }
+  ]
+}
