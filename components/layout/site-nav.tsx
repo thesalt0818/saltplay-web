@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -94,6 +95,14 @@ function useIsActive() {
 export function SiteRail() {
   const isActive = useIsActive();
 
+  /**
+   * 메뉴를 눌러서 접어 둔 상태인가.
+   *
+   * 누른 뒤에도 메뉴가 펼쳐진 채로 남아 화면을 가리는 것을 막는다. 마우스가 레일을
+   * 벗어나면 풀리므로, 다음에 다시 올리면 정상적으로 펼쳐진다.
+   */
+  const [dismissed, setDismissed] = useState(false);
+
   return (
     // 자리만 잡는 빈 칸. 실제 메뉴는 이 안에서 떠 있다.
     //
@@ -104,13 +113,19 @@ export function SiteRail() {
     <div className="sticky top-14 z-30 hidden h-[calc(100dvh-3.5rem)] w-16 shrink-0 lg:block">
       <nav
         aria-label="주요 메뉴"
+        // 마우스가 레일을 벗어나면 '눌러서 접어 둔' 상태를 푼다.
+        // 이게 없으면 한 번 누른 뒤로 다시는 펼쳐지지 않는다.
+        onMouseLeave={() => setDismissed(false)}
         className={cn(
           "group/rail absolute inset-y-0 left-0 z-30 w-16",
           "overflow-y-auto overflow-x-hidden border-r border-border bg-background py-3",
           // 펼쳐질 때 아래 내용과 겹치므로 그림자로 층을 나눈다.
           "transition-[width,box-shadow] duration-200 ease-out",
-          "hover:w-56 hover:shadow-2xl hover:shadow-black/60",
-          "focus-within:w-56 focus-within:shadow-2xl focus-within:shadow-black/60",
+          // 눌러서 접어 둔 동안에는 펼치는 규칙 자체를 걸지 않는다.
+          !dismissed && [
+            "hover:w-56 hover:shadow-2xl hover:shadow-black/60",
+            "focus-within:w-56 focus-within:shadow-2xl focus-within:shadow-black/60",
+          ],
         )}
       >
         <ul className="flex flex-col gap-1">
@@ -123,6 +138,16 @@ export function SiteRail() {
               <Link
                 href={item.href}
                 aria-current={isActive(item.href) ? "page" : undefined}
+                onClick={(event) => {
+                  // ⚠️ 누른 링크에는 포커스가 남는다. 그대로 두면 `focus-within` 이
+                  // 그 포커스를 붙잡아서 **마우스를 치워도 메뉴가 계속 펼쳐져 있다.**
+                  // 눌렀을 때는 포커스를 놓고 접는다.
+                  //
+                  // Tab 키로 옮겨 다닐 때는 click 이 아니라서 여기 걸리지 않는다 —
+                  // 키보드 사용자에게는 이름이 그대로 보인다.
+                  event.currentTarget.blur();
+                  setDismissed(true);
+                }}
                 className={cn(
                   "mx-2 flex h-12 items-center gap-4 rounded-xl transition-colors",
                   // px-3 = 12px. 아이콘 24px 과 좌우 여백이 (12+2)+24+... 로
@@ -145,7 +170,10 @@ export function SiteRail() {
                   className={cn(
                     "whitespace-nowrap text-sm font-bold opacity-0",
                     "transition-opacity duration-200",
-                    "group-hover/rail:opacity-100 group-focus-within/rail:opacity-100",
+                    // 폭과 같은 조건을 따라야 한다. 한쪽만 걸면 접힌 레일에
+                    // 글씨가 삐져나온다.
+                    !dismissed &&
+                      "group-hover/rail:opacity-100 group-focus-within/rail:opacity-100",
                   )}
                 >
                   {item.label}
