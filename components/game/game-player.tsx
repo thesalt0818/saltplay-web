@@ -27,14 +27,16 @@ import { GameThumbnail } from "./game-thumbnail";
  * 게임은 이 사이트에 들어 있지 않다 — 바깥(GitHub Pages)에 따로 배포된 HTML5
  * 빌드를 `<iframe>` 으로 불러온다. 앱이 WebView 로 하는 일과 같다.
  *
- * ## 시작 방식이 기기마다 다르다
+ * ## 시작 방식
  *
- * - **PC**: 페이지에 들어오면 바로 실행된다. 창이 넓어 플레이어 안에서 그대로 할 수 있다.
- * - **폰**: '플레이'를 한 번 눌러야 하고, 그 누름이 곧 **전체화면 진입**이 된다.
+ * 어느 기기에서든 표지의 '플레이'를 눌러야 시작한다. 그 뒤가 다르다.
  *
- * ⚠️ **폰에서 버튼을 없앨 수 없다.** 브라우저는 사용자가 직접 누르지 않으면
- * 전체화면을 허용하지 않는다(보안 정책). 자동으로 부르면 조용히 거부당해서
- * 작은 화면에 그대로 남는다. 그래서 그 한 번의 누름을 시작과 전체화면에 함께 쓴다.
+ * - **PC**: 플레이어 안에서 그대로 실행된다. 창이 이미 넓다.
+ * - **폰**: 누르는 그 순간 **전체화면으로 들어간다.**
+ *
+ * ⚠️ **버튼을 없앨 수 없다.** 브라우저는 사용자가 직접 누르지 않으면 전체화면을
+ * 허용하지 않는다(보안 정책). 자동으로 부르면 조용히 거부당한다.
+ * 그래서 그 한 번의 누름을 시작과 전체화면에 함께 쓴다.
  *
  * 기기 판단은 **화면 폭이 아니라 입력 방식**(`pointer: coarse`)으로 한다.
  * 태블릿을 눕히면 1280px 이 되어 폭으로는 PC 로 오인된다.
@@ -54,6 +56,11 @@ export function GamePlayer({ game }: { game: Game }) {
   const [noticeOpen, setNoticeOpen] = useState(true);
   const [muted, setMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  /**
+   * 브라우저 전체화면이 안 될 때 우리가 직접 화면을 덮는 상태.
+   * iOS 사파리처럼 전체화면 기능이 없는 기기에서 이게 유일한 방법이다.
+   */
+  const [immersive, setImmersive] = useState(false);
 
   // 가로 게임인지. 'sensor'(기기에 맡김)는 가로로 본다 — 대부분 가로가 기본이다.
   const landscape = game.orientation !== "portrait";
@@ -63,15 +70,6 @@ export function GamePlayer({ game }: { game: Game }) {
     setStarted(true);
     pushRecent(game.id);
   }, [game.id]);
-
-  // PC 는 들어오자마자 실행한다.
-  //
-  // ⚠️ 손가락 기기에서는 그러지 않는다. 자동으로 시작해 버리면 전체화면으로 들어갈
-  // 기회(사용자의 누름)를 잃어서, 폰에서 손톱만 한 화면으로 게임을 하게 된다.
-  useEffect(() => {
-    if (window.matchMedia("(pointer: coarse)").matches) return;
-    start();
-  }, [start]);
 
   /* ── 음소거 ──────────────────────────────────────────────────────────────
    *
@@ -123,6 +121,26 @@ export function GamePlayer({ game }: { game: Game }) {
 
   /* ── 전체화면 ────────────────────────────────────────────────────────── */
 
+  // 화면을 덮는 동안에는 뒤 페이지가 따라 스크롤되지 않아야 한다.
+  // Esc 로도 빠져나올 수 있게 한다(브라우저 전체화면은 Esc 가 기본이지만
+  // 우리 방식은 직접 처리해야 한다).
+  useEffect(() => {
+    if (!immersive) return;
+
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setImmersive(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [immersive]);
+
   // 브라우저의 전체화면 상태를 따라간다. Esc 나 기기 버튼으로 빠져나가도
   // 우리 버튼이 실제 상태와 어긋나지 않아야 한다.
   useEffect(() => {
@@ -133,14 +151,37 @@ export function GamePlayer({ game }: { game: Game }) {
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
+  /**
+   * 전체화면으로 들어간다.
+   *
+   * ⚠️ **브라우저의 전체화면 기능만 믿으면 안 된다.**
+   * iOS 사파리는 일반 요소의 전체화면을 **아예 지원하지 않는다**(영상만 된다).
+   * 그래서 요청이 조용히 실패하고 작은 화면 그대로 남는다 — 실제로 겪은 증상이다.
+   *
+   * 그래서 실패하면 **우리가 직접 화면을 덮는다**(`immersive`). CSS 로 화면 전체를
+   * 채우는 것이라 어느 기기에서든 통한다. 주소창이 남는다는 차이는 있지만
+   * 게임은 화면을 꽉 채운다.
+   */
   const enterFullscreen = useCallback(async () => {
     const el = frameRef.current;
     if (!el) return;
 
+    // 어떤 방법이든 화면은 채워야 하므로 우리 방식을 먼저 켠다.
+    // 브라우저 전체화면이 성공하면 그 위에 얹히므로 어색해지지 않는다.
+    setImmersive(true);
+
+    // webkit 접두사가 붙은 옛 방식도 함께 본다(구형 안드로이드 브라우저).
+    const request =
+      el.requestFullscreen ??
+      (el as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> })
+        .webkitRequestFullscreen;
+
+    if (!request) return;
+
     try {
-      await el.requestFullscreen();
+      await request.call(el);
     } catch {
-      // 브라우저가 막으면 그냥 전체화면 없이 계속한다.
+      // 브라우저가 막았다 — 위에서 켠 우리 방식으로 계속한다.
       return;
     }
 
@@ -156,10 +197,14 @@ export function GamePlayer({ game }: { game: Game }) {
   }, [landscape]);
 
   const exitFullscreen = useCallback(async () => {
-    try {
-      await document.exitFullscreen();
-    } catch {
-      /* 이미 나와 있으면 그만이다 */
+    setImmersive(false);
+
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        /* 이미 나와 있으면 그만이다 */
+      }
     }
     try {
       screen.orientation.unlock?.();
@@ -208,19 +253,22 @@ export function GamePlayer({ game }: { game: Game }) {
         <div
           ref={frameRef}
           className={cn(
-            "relative overflow-hidden rounded-xl bg-black",
-            // 전체화면일 때는 비율·크기 제한을 모두 풀고 화면을 꽉 채운다.
+            "relative overflow-hidden bg-black",
+            // 브라우저 전체화면일 때는 비율·크기 제한을 모두 푼다.
             "[&:fullscreen]:aspect-auto [&:fullscreen]:h-full [&:fullscreen]:w-full [&:fullscreen]:max-h-none [&:fullscreen]:rounded-none",
-            landscape
-              ? "aspect-video w-full"
-              : // 세로 게임을 16:9 틀에 넣으면 폭에 맞춰 커지면서 위아래가 잘린다.
-                // 그래서 세로 비율을 지키되, 넓은 화면에서는 **높이**를 먼저 정하고
-                // 폭이 거기서 따라 나오게 한다. 그러지 않으면 플레이어가 화면보다
-                // 길어져서 아래 조작 줄이 스크롤해야 보인다.
-                [
-                  "aspect-[3/4] w-full",
-                  "sm:h-[calc(100dvh-13rem)] sm:max-h-[700px] sm:w-auto",
-                ].join(" "),
+            immersive
+              ? // 우리가 직접 화면을 덮는 경우. 헤더(z-40)보다 위에 있어야 한다.
+                "fixed inset-0 z-[60] h-full w-full"
+              : [
+                  "rounded-xl",
+                  landscape
+                    ? "aspect-video w-full"
+                    : // 세로 게임을 16:9 틀에 넣으면 폭에 맞춰 커지면서 위아래가 잘린다.
+                      // 그래서 세로 비율을 지키되, 넓은 화면에서는 **높이**를 먼저
+                      // 정하고 폭이 거기서 따라 나오게 한다. 그러지 않으면 플레이어가
+                      // 화면보다 길어져서 아래 조작 줄이 스크롤해야 보인다.
+                      "aspect-[3/4] w-full sm:h-[calc(100dvh-13rem)] sm:max-h-[700px] sm:w-auto",
+                ],
           )}
         >
           {started ? (
@@ -239,11 +287,16 @@ export function GamePlayer({ game }: { game: Game }) {
             <PlayPoster
               game={game}
               onStart={() => {
-                // 이 한 번의 누름이 시작과 전체화면 진입을 함께 맡는다.
-                // 나눠서 부르면 두 번째는 '사용자가 누른 것'으로 쳐 주지 않아
-                // 전체화면이 조용히 거부된다.
                 start();
-                enterFullscreen();
+
+                // 폰에서만 전체화면으로 들어간다. PC 는 창이 이미 넓어서
+                // 플레이어 안에서 그대로 하는 편이 낫다.
+                //
+                // ⚠️ 반드시 이 자리(누른 순간)에서 불러야 한다. 나중으로 미루면
+                // '사용자가 누른 것'으로 쳐 주지 않아 전체화면이 조용히 거부된다.
+                if (window.matchMedia("(pointer: coarse)").matches) {
+                  enterFullscreen();
+                }
               }}
             />
           )}
@@ -254,7 +307,7 @@ export function GamePlayer({ game }: { game: Game }) {
             화면에 보이므로, 아래 조작 줄에 두면 나가는 방법이 사라진다.
             폰에는 Esc 키가 없어서 이 버튼이 유일한 출구다.
           */}
-          {isFullscreen && (
+          {(isFullscreen || immersive) && (
             <div className="absolute left-3 top-3 z-10 flex gap-2">
               <OverlayButton onClick={exitFullscreen}>
                 <Minimize className="h-4 w-4" aria-hidden />
