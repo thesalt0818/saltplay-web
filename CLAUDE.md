@@ -270,9 +270,51 @@ Supabase 의 `game_plays` 로 옮기고, 로그인하지 않은 사람에게는 
 따로 배포된 HTML5 빌드다. 이 사이트는 목록·상세·실행 껍데기다.
 
 - `orientation` 값(`portrait` / `landscape` / `sensor`)에 맞춰 iframe 비율을 잡는다.
-- 전체화면은 Fullscreen API + `screen.orientation.lock()` 으로 처리한다 (모바일 한정,
-  실패해도 게임은 돌아가야 한다).
 - iframe 에 `allow="autoplay; fullscreen"` 이 필요하다 — 없으면 게임 소리가 안 난다.
+
+### 플레이어 조작 줄
+
+추천 · 비추천 · 음소거, 그리고 **폰에서만** 전체화면(`lg:hidden`). PC 는 창이 이미
+크고 Esc 로 빠져나올 수도 있어서 전체화면 버튼을 두지 않는다.
+
+- **추천·비추천은 아직 모양만 있다.** 누가 무엇을 눌렀는지 기억할 곳(Supabase)이
+  없기 때문이다. ⚠️ **옆에 숫자를 지어내 붙이지 않는다.** 없는 값을 그럴듯하게
+  보여 주면 나중에 진짜 숫자가 붙었을 때 아무도 그 숫자를 믿지 않는다.
+- **전체화면에서 나가는 버튼은 플레이어 상자 안에 둔다.** 전체화면일 때는 그 상자만
+  화면에 보이므로 아래 조작 줄에 두면 나가는 방법이 사라진다. **폰에는 Esc 키가
+  없어서 이 버튼이 유일한 출구다.**
+- 전체화면 상태는 `fullscreenchange` 를 구독해서 따라간다. Esc 나 기기 버튼으로
+  빠져나가도 버튼 표시가 실제 상태와 어긋나지 않아야 한다.
+
+### 음소거는 절반만 우리 손에 있다
+
+iframe 안은 남의 페이지라 마음대로 만질 수 없다. 두 가지를 함께 시도한다.
+
+1. **같은 출처면 직접 끈다** — 안의 `<audio>`/`<video>` 를 만진다.
+   배포 주소(`thesalt0818.github.io/saltplay-web`)와 게임 주소
+   (`thesalt0818.github.io/...`)는 **같은 출처라 이게 동작한다.**
+   ⚠️ 단, 개발 중(`localhost`)에는 다른 출처라 이 경로가 막힌다 — 로컬에서 음소거가
+   안 되는 것은 고장이 아니다. 그리고 `thesalt0225.github.io` 에 있는 게임처럼
+   계정이 다른 것도 막힌다.
+2. **게임에 메시지를 보낸다** — Cocos 는 소리를 Web Audio 로 내는데 그건 밖에서 끌
+   방법이 아예 없다. 게임 쪽이 받아서 스스로 꺼 줘야 한다.
+
+**게임 프로젝트(Cocos)에 이 코드를 넣으면 음소거가 완전히 동작한다:**
+
+```js
+// 게임의 시작 스크립트에 한 번만 넣는다.
+window.addEventListener("message", (event) => {
+  // 우리 사이트에서 온 것만 받는다.
+  if (event.origin !== "https://thesalt0818.github.io") return;
+  if (event.data?.type !== "saltplay:mute") return;
+
+  // Cocos Creator 2.x
+  cc.audioEngine.setVolume?.(event.data.muted ? 0 : 1);
+  // Cocos Creator 3.x 라면 AudioSource 의 volume 을 바꾸거나 mute 플래그를 쓴다.
+});
+```
+
+이 코드를 넣기 전까지는 음소거가 **게임에 따라 듣지 않을 수 있다.**
 
 ---
 

@@ -1,15 +1,18 @@
 "use client";
 
 import {
-  ExternalLink,
   Maximize,
+  Minimize,
   Play,
-  RotateCcw,
   Smartphone,
+  ThumbsDown,
+  ThumbsUp,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Game } from "@/lib/games";
 import { playUrl } from "@/lib/games";
 import { pushRecent } from "@/lib/recent";
@@ -29,22 +32,84 @@ import { GameThumbnail } from "./game-thumbnail";
  * '플레이'를 누른 뒤에 iframe 을 만든다. 이 방식은 검색엔진에도 유리하다 —
  * 크롤러는 게임을 실행하지 않고 설명 글만 읽는다.
  *
- * ## 회전 대비
+ * ## 조작 줄
  *
- * 가로 게임을 세로로 든 폰에서 열면 화면이 손톱만 해진다. 그때는 "가로로 돌려
- * 주세요" 안내를 띄운다. `screen.orientation.lock()` 은 전체화면에서만, 그것도
- * 되는 기기에서만 동작하므로 **실패해도 게임은 그대로 돌아가야 한다.**
+ * 추천 · 비추천 · 음소거가 있고, **전체화면은 폰에서만** 나온다. PC 는 창이 이미
+ * 크고 Esc 로 빠져나오는 방법도 있지만, 폰은 화면이 좁아 전체화면이 실제로 필요하다.
  */
 export function GamePlayer({ game }: { game: Game }) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
   const [started, setStarted] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
   const [noticeOpen, setNoticeOpen] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 가로 게임인지. 'sensor'(기기에 맡김)는 가로로 본다 — 대부분 가로가 기본이다.
   const landscape = game.orientation !== "portrait";
 
-  const goFullscreen = useCallback(async () => {
+  /* ── 음소거 ──────────────────────────────────────────────────────────────
+   *
+   * iframe 안은 남의 페이지라 마음대로 들여다볼 수 없다. 두 가지를 함께 시도한다.
+   *
+   * 1. **같은 출처면 직접 끈다.** 게임이 사이트와 같은 도메인(github.io)에 있으면
+   *    안의 `<audio>`/`<video>` 를 그대로 만질 수 있다.
+   * 2. **게임에 메시지를 보낸다.** Cocos 같은 엔진은 소리를 Web Audio 로 내는데,
+   *    그건 밖에서 끌 방법이 없다. 게임 쪽에서 이 메시지를 받아 스스로 꺼 줘야 한다.
+   *    (게임에 넣을 코드는 CLAUDE.md 4절에 적어 두었다.)
+   *
+   * 둘 다 실패해도 **예외를 밖으로 내보내지 않는다.** 소리 하나 때문에 게임 화면이
+   * 통째로 죽으면 안 된다.
+   */
+  const applyMute = useCallback(
+    (next: boolean) => {
+      const frame = iframeRef.current;
+      if (!frame) return;
+
+      try {
+        frame.contentDocument
+          ?.querySelectorAll<HTMLMediaElement>("audio, video")
+          .forEach((element) => {
+            element.muted = next;
+          });
+      } catch {
+        /* 다른 출처의 게임 — 들여다볼 수 없다. 아래 메시지에 맡긴다. */
+      }
+
+      try {
+        // 아무 데나 보내지 않도록 게임 주소의 출처로만 보낸다.
+        const origin = new URL(game.url).origin;
+        frame.contentWindow?.postMessage(
+          { type: "saltplay:mute", muted: next },
+          origin,
+        );
+      } catch {
+        /* 주소가 이상하면 보낼 곳이 없다 */
+      }
+    },
+    [game.url],
+  );
+
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    applyMute(next);
+  };
+
+  /* ── 전체화면 ────────────────────────────────────────────────────────── */
+
+  // 브라우저의 전체화면 상태를 따라간다. Esc 나 기기 버튼으로 빠져나가도
+  // 우리 버튼이 실제 상태와 어긋나지 않아야 한다.
+  useEffect(() => {
+    const onChange = () =>
+      setIsFullscreen(document.fullscreenElement === frameRef.current);
+
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const enterFullscreen = useCallback(async () => {
     const el = frameRef.current;
     if (!el) return;
 
@@ -65,6 +130,19 @@ export function GamePlayer({ game }: { game: Game }) {
       /* 지원하지 않는 기기 — 무시한다 */
     }
   }, [landscape]);
+
+  const exitFullscreen = useCallback(async () => {
+    try {
+      await document.exitFullscreen();
+    } catch {
+      /* 이미 나와 있으면 그만이다 */
+    }
+    try {
+      screen.orientation.unlock?.();
+    } catch {
+      /* 방향을 고정한 적이 없으면 그만이다 */
+    }
+  }, []);
 
   return (
     <div className="flex flex-col gap-2">
@@ -112,9 +190,10 @@ export function GamePlayer({ game }: { game: Game }) {
         >
           {started ? (
             <iframe
-              key={reloadKey}
+              ref={iframeRef}
               src={playUrl(game)}
               title={game.title}
+              onLoad={() => applyMute(muted)}
               className="absolute inset-0 h-full w-full border-0"
               // autoplay 가 없으면 화면을 한 번 건드리기 전까지 소리가 나지 않는다.
               allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"
@@ -133,6 +212,27 @@ export function GamePlayer({ game }: { game: Game }) {
             />
           )}
 
+          {/*
+            전체화면에서 빠져나오는 버튼.
+            ⚠️ **반드시 플레이어 안에 있어야 한다.** 전체화면일 때는 이 상자만
+            화면에 보이므로, 아래 조작 줄에 두면 나가는 방법이 사라진다.
+            폰에는 Esc 키가 없어서 이 버튼이 유일한 출구다.
+          */}
+          {isFullscreen && (
+            <button
+              type="button"
+              onClick={exitFullscreen}
+              className={cn(
+                "absolute left-3 top-3 z-10 flex items-center gap-1.5",
+                "rounded-full bg-black/70 px-3 py-2 text-sm font-bold text-white",
+                "backdrop-blur transition hover:bg-black/85",
+              )}
+            >
+              <Minimize className="h-4 w-4" aria-hidden />
+              나가기
+            </button>
+          )}
+
           {/* 세로로 든 폰에서 가로 게임을 열었을 때만 나온다.
             CSS 조건만으로 판단하므로 자바스크립트가 관여하지 않는다. */}
           {landscape && started && (
@@ -146,34 +246,46 @@ export function GamePlayer({ game }: { game: Game }) {
         </div>
       </div>
 
-      {/* 플레이어 아래 조작 줄 — 두 번째 시안의 그 자리다. */}
+      {/* 플레이어 아래 조작 줄. */}
       <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2">
         <div className="h-8 w-8 shrink-0 overflow-hidden rounded-icon">
           <GameThumbnail game={game} priority />
         </div>
         <p className="min-w-0 flex-1 truncate font-bold">{game.title}</p>
 
-        {started && (
-          <PlayerButton
-            label="다시 시작"
-            onClick={() => setReloadKey((key) => key + 1)}
-          >
-            <RotateCcw className="h-5 w-5" />
-          </PlayerButton>
-        )}
-        <PlayerButton label="전체화면" onClick={goFullscreen}>
+        {/*
+          추천·비추천은 아직 **모양만** 있다. 누가 무엇을 눌렀는지 기억할 곳
+          (Supabase)이 없기 때문이다.
+          ⚠️ 옆에 숫자를 지어내 붙이지 않는다. 없는 값을 그럴듯하게 보여 주면
+          나중에 진짜 숫자가 붙었을 때 아무도 그 숫자를 믿지 않는다.
+        */}
+        <PlayerButton label="추천 (준비 중)" disabled>
+          <ThumbsUp className="h-5 w-5" />
+        </PlayerButton>
+        <PlayerButton label="비추천 (준비 중)" disabled>
+          <ThumbsDown className="h-5 w-5" />
+        </PlayerButton>
+
+        <PlayerButton
+          label={muted ? "소리 켜기" : "소리 끄기"}
+          onClick={toggleMute}
+          active={muted}
+        >
+          {muted ? (
+            <VolumeX className="h-5 w-5" />
+          ) : (
+            <Volume2 className="h-5 w-5" />
+          )}
+        </PlayerButton>
+
+        {/* 전체화면은 폰에서만. PC 는 창이 이미 크다. */}
+        <PlayerButton
+          label="전체화면"
+          onClick={enterFullscreen}
+          className="lg:hidden"
+        >
           <Maximize className="h-5 w-5" />
         </PlayerButton>
-        <a
-          href={playUrl(game)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="새 탭에서 열기"
-          className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
-        >
-          <ExternalLink className="h-5 w-5" />
-          <span className="sr-only">새 탭에서 열기</span>
-        </a>
       </div>
     </div>
   );
@@ -184,7 +296,7 @@ function PlayPoster({ game, onStart }: { game: Game; onStart: () => void }) {
   return (
     <div className="absolute inset-0">
       {/* 아이콘을 크게 늘려 흐린 배경으로 쓴다 — 게임마다 표지 색이 달라진다. */}
-      <div className="absolute inset-0 scale-110 blur-2xl opacity-40">
+      <div className="absolute inset-0 scale-110 opacity-40 blur-2xl">
         <GameThumbnail game={game} priority />
       </div>
 
@@ -214,17 +326,33 @@ function PlayerButton({
   label,
   onClick,
   children,
+  disabled,
+  active,
+  className,
 }: {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   children: React.ReactNode;
+  disabled?: boolean;
+  /** 켜져 있는 상태(예: 음소거 중)를 눈에 띄게 한다. */
+  active?: boolean;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       title={label}
-      className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
+      aria-pressed={active}
+      className={cn(
+        "grid h-9 w-9 shrink-0 place-items-center rounded-lg transition",
+        disabled
+          ? "cursor-not-allowed text-muted-foreground/40"
+          : "text-muted-foreground hover:bg-surface-high hover:text-foreground",
+        active && "bg-surface-high text-primary",
+        className,
+      )}
     >
       {children}
       <span className="sr-only">{label}</span>
