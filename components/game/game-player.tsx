@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Home,
   Maximize,
   Minimize,
   Play,
@@ -12,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Game } from "@/lib/games";
 import { playUrl } from "@/lib/games";
@@ -25,12 +27,17 @@ import { GameThumbnail } from "./game-thumbnail";
  * 게임은 이 사이트에 들어 있지 않다 — 바깥(GitHub Pages)에 따로 배포된 HTML5
  * 빌드를 `<iframe>` 으로 불러온다. 앱이 WebView 로 하는 일과 같다.
  *
- * ## 왜 처음에는 iframe 을 안 띄우나
+ * ## 시작 방식이 기기마다 다르다
  *
- * 페이지에 들어오자마자 게임을 받기 시작하면 **아직 할 생각이 없는 사람에게도**
- * 수 MB 를 내려받게 하고, 소리가 갑자기 나기도 한다. 그래서 표지를 먼저 보여 주고
- * '플레이'를 누른 뒤에 iframe 을 만든다. 이 방식은 검색엔진에도 유리하다 —
- * 크롤러는 게임을 실행하지 않고 설명 글만 읽는다.
+ * - **PC**: 페이지에 들어오면 바로 실행된다. 창이 넓어 플레이어 안에서 그대로 할 수 있다.
+ * - **폰**: '플레이'를 한 번 눌러야 하고, 그 누름이 곧 **전체화면 진입**이 된다.
+ *
+ * ⚠️ **폰에서 버튼을 없앨 수 없다.** 브라우저는 사용자가 직접 누르지 않으면
+ * 전체화면을 허용하지 않는다(보안 정책). 자동으로 부르면 조용히 거부당해서
+ * 작은 화면에 그대로 남는다. 그래서 그 한 번의 누름을 시작과 전체화면에 함께 쓴다.
+ *
+ * 기기 판단은 **화면 폭이 아니라 입력 방식**(`pointer: coarse`)으로 한다.
+ * 태블릿을 눕히면 1280px 이 되어 폭으로는 PC 로 오인된다.
  *
  * ## 조작 줄
  *
@@ -41,6 +48,8 @@ export function GamePlayer({ game }: { game: Game }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  const router = useRouter();
+
   const [started, setStarted] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(true);
   const [muted, setMuted] = useState(false);
@@ -48,6 +57,21 @@ export function GamePlayer({ game }: { game: Game }) {
 
   // 가로 게임인지. 'sensor'(기기에 맡김)는 가로로 본다 — 대부분 가로가 기본이다.
   const landscape = game.orientation !== "portrait";
+
+  /** 게임을 실제로 띄운다. '계속 플레이하기'에 쌓이는 시점도 여기다. */
+  const start = useCallback(() => {
+    setStarted(true);
+    pushRecent(game.id);
+  }, [game.id]);
+
+  // PC 는 들어오자마자 실행한다.
+  //
+  // ⚠️ 손가락 기기에서는 그러지 않는다. 자동으로 시작해 버리면 전체화면으로 들어갈
+  // 기회(사용자의 누름)를 잃어서, 폰에서 손톱만 한 화면으로 게임을 하게 된다.
+  useEffect(() => {
+    if (window.matchMedia("(pointer: coarse)").matches) return;
+    start();
+  }, [start]);
 
   /* ── 음소거 ──────────────────────────────────────────────────────────────
    *
@@ -144,6 +168,17 @@ export function GamePlayer({ game }: { game: Game }) {
     }
   }, []);
 
+  /**
+   * 게임을 끝내고 홈으로 간다.
+   *
+   * ⚠️ 전체화면을 **먼저 벗어난 뒤** 이동한다. 전체화면인 채로 페이지를 옮기면
+   * 브라우저에 따라 전체화면이 남아 홈 화면이 이상하게 보인다.
+   */
+  const quitToHome = useCallback(async () => {
+    await exitFullscreen();
+    router.push("/");
+  }, [exitFullscreen, router]);
+
   return (
     <div className="flex flex-col gap-2">
       {noticeOpen && (
@@ -204,10 +239,11 @@ export function GamePlayer({ game }: { game: Game }) {
             <PlayPoster
               game={game}
               onStart={() => {
-                setStarted(true);
-                // '계속 플레이하기'에 쌓이는 시점은 여기다. 상세 페이지를 열기만
-                // 해도 기록하면 잠깐 들렀다 나온 게임까지 목록에 남는다.
-                pushRecent(game.id);
+                // 이 한 번의 누름이 시작과 전체화면 진입을 함께 맡는다.
+                // 나눠서 부르면 두 번째는 '사용자가 누른 것'으로 쳐 주지 않아
+                // 전체화면이 조용히 거부된다.
+                start();
+                enterFullscreen();
               }}
             />
           )}
@@ -219,18 +255,19 @@ export function GamePlayer({ game }: { game: Game }) {
             폰에는 Esc 키가 없어서 이 버튼이 유일한 출구다.
           */}
           {isFullscreen && (
-            <button
-              type="button"
-              onClick={exitFullscreen}
-              className={cn(
-                "absolute left-3 top-3 z-10 flex items-center gap-1.5",
-                "rounded-full bg-black/70 px-3 py-2 text-sm font-bold text-white",
-                "backdrop-blur transition hover:bg-black/85",
-              )}
-            >
-              <Minimize className="h-4 w-4" aria-hidden />
-              나가기
-            </button>
+            <div className="absolute left-3 top-3 z-10 flex gap-2">
+              <OverlayButton onClick={exitFullscreen}>
+                <Minimize className="h-4 w-4" aria-hidden />
+                작게 보기
+              </OverlayButton>
+
+              {/* 게임을 끝내고 목록으로 돌아가는 길. 전체화면에서는 사이트의
+                  메뉴가 하나도 안 보이므로 이 버튼이 없으면 갇힌 느낌이 된다. */}
+              <OverlayButton onClick={quitToHome}>
+                <Home className="h-4 w-4" aria-hidden />
+                게임 종료
+              </OverlayButton>
+            </div>
           )}
 
           {/* 세로로 든 폰에서 가로 게임을 열었을 때만 나온다.
@@ -319,6 +356,28 @@ function PlayPoster({ game, onStart }: { game: Game; onStart: () => void }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/** 전체화면 위에 떠 있는 버튼. 게임 화면 위에서도 읽히도록 어둡게 깐다. */
+function OverlayButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-2",
+        "text-sm font-bold text-white backdrop-blur transition hover:bg-black/85",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
