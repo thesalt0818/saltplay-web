@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import type { Game, RowConfig } from "@/lib/games";
+import type { Audience, Game, RowConfig } from "@/lib/games";
 import { asset } from "@/lib/site";
 import { GameCard } from "./game-card";
 import { ScrollRow } from "./scroll-row";
@@ -18,11 +18,14 @@ import { ScrollRow } from "./scroll-row";
 export function GameRow({
   row,
   games,
+  audience = "all",
   priority = false,
   moreHref,
 }: {
   row: RowConfig;
   games: Game[];
+  /** 추천 띠의 배경 그림이 등급에 따라 다르다(앱과 같다). */
+  audience?: Audience;
   /** 첫 화면에 보이는 줄이면 true — 그림을 미루지 않고 바로 받는다. */
   priority?: boolean;
   /** '더 보기'로 갈 주소. 없으면 화살표를 그리지 않는다. */
@@ -31,6 +34,7 @@ export function GameRow({
   if (games.length === 0) return null;
 
   const featured = row.style === "featured";
+  const theme = FEATURED_THEME[audience];
 
   return (
     <section
@@ -43,8 +47,8 @@ export function GameRow({
         featured
           ? {
               // 그림을 못 읽어도 비슷한 색이 깔리도록 그라디언트를 아래에 둔다.
-              // 값은 앱의 featuredFrom/To 와 같다.
-              backgroundImage: `url(${asset("/ui/featured-bg.png")}), linear-gradient(135deg, #595E95, #3E4178)`,
+              // 폴백 색이 원본과 다르면 그림이 빠졌을 때 티가 안 나고 넘어간다.
+              backgroundImage: `url(${asset(theme.background)}), linear-gradient(135deg, ${theme.from}, ${theme.to})`,
             }
           : undefined
       }
@@ -99,3 +103,25 @@ export function GameRow({
     </section>
   );
 }
+
+/**
+ * 추천 띠의 등급별 배경. 값은 앱 `app_theme.dart` 의 `kAudienceStyles` 와 같다.
+ *
+ * `from`/`to` 는 배경 그림에서 직접 뽑은 색이다 — 그림을 못 읽었을 때 대신 깔린다.
+ * 폴백이 원본과 다른 색이면 에셋이 빠져도 티가 안 나고 넘어간다.
+ */
+const FEATURED_THEME: Record<
+  Audience,
+  { background: string; from: string; to: string }
+> = {
+  all: {
+    background: "/ui/featured-bg.png",
+    from: "#595E95",
+    to: "#3E4178",
+  },
+  adult: {
+    background: "/ui/featured-bg-adult.png",
+    from: "#C93A47",
+    to: "#AE222A",
+  },
+};

@@ -67,8 +67,14 @@ export default {
           DEFAULT: "hsl(var(--top))",
           foreground: "hsl(var(--top-foreground))",
         },
-        // 성인용 표시색. 전체이용가 화면에서는 쓰지 않는다.
-        adult: "hsl(var(--adult))",
+        // 성인용 표시색과, 등급 스위치에서 고르지 않은 쪽의 색.
+        adult: {
+          DEFAULT: "hsl(var(--adult))",
+          inactive: "hsl(var(--adult-inactive))",
+        },
+        audience: {
+          inactive: "hsl(var(--audience-inactive))",
+        },
         // 입력칸(앱의 textbox_bg 와 같은 밝은 회청색). bg-field text-field-foreground
         field: {
           DEFAULT: "hsl(var(--field))",
