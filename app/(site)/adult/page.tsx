@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { AudienceSwitch } from "@/components/game/audience-switch";
+import { ContinuePlaying } from "@/components/game/continue-playing";
 import { HomeRows } from "@/components/game/home-rows";
+import { getGames } from "@/lib/games";
 
 export const metadata: Metadata = {
   title: "SaltPlay Adult",
@@ -24,12 +26,15 @@ export const metadata: Metadata = {
  *
  * ⚠️ 지금은 테스트 단계라 연령 확인이 없다. 실제로 공개하기 전에 반드시 붙여야 한다.
  */
-export default function AdultHomePage() {
+export default async function AdultHomePage() {
+  const games = await getGames("adult");
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="sr-only">SaltPlay Adult — 성인용 게임</h1>
 
       <AudienceSwitch current="adult" />
+      <ContinuePlaying games={games} />
       <HomeRows audience="adult" />
     </div>
   );

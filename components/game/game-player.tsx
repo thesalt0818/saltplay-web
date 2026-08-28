@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import type { Game } from "@/lib/games";
 import { playUrl } from "@/lib/games";
+import { pushRecent } from "@/lib/recent";
 import { cn } from "@/lib/utils";
 import { GameThumbnail } from "./game-thumbnail";
 
@@ -121,7 +122,15 @@ export function GamePlayer({ game }: { game: Game }) {
               sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups"
             />
           ) : (
-            <PlayPoster game={game} onStart={() => setStarted(true)} />
+            <PlayPoster
+              game={game}
+              onStart={() => {
+                setStarted(true);
+                // '계속 플레이하기'에 쌓이는 시점은 여기다. 상세 페이지를 열기만
+                // 해도 기록하면 잠깐 들렀다 나온 게임까지 목록에 남는다.
+                pushRecent(game.id);
+              }}
+            />
           )}
 
           {/* 세로로 든 폰에서 가로 게임을 열었을 때만 나온다.
