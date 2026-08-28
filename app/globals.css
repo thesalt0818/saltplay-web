@@ -110,6 +110,22 @@
     border-radius: 7.5%;
   }
 
+  /* 로그인 패널이 오른쪽에서 밀려나오는 움직임.
+     tailwindcss-animate 의 slide-in-from-right 는 크기를 함께 적어야 하는
+     클래스라, 짐작해서 쓰기보다 여기에 직접 적어 둔다. */
+  .animate-slide-in-right {
+    animation: slide-in-right 200ms ease-out;
+  }
+
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
   /* 세로형 아이콘(2:3, *_icon_long.png) 전용.
      CSS 의 % 반지름은 가로·세로에 따로 적용되므로, 높이가 가로의 1.5배인 카드에서
      가로 7.5% 와 같은 크기를 내려면 세로는 5% 여야 한다 (7.5 ÷ 1.5 = 5). */

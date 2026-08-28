@@ -1,17 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AuthPanel } from "./auth/auth-panel";
 import { Button } from "./ui/button";
+import { LogoutButton } from "./logout-button";
 import { createClient } from "@/lib/supabase/client";
 import { hasEnvVars } from "@/lib/utils";
-import { LogoutButton } from "./logout-button";
 
 /**
  * 로그인 상태에 따라 달라지는 헤더 버튼.
  *
- * 원래는 서버에서 쿠키를 읽어 판단했다. 정적 호스팅에는 서버가 없어서
- * **브라우저에서 판단**하도록 바꿨다.
+ * 서버에서 쿠키를 읽어 판단하던 것을 **브라우저에서 판단**하도록 바꿨다.
+ * 정적 호스팅에는 요청을 받아 줄 서버가 없기 때문이다.
  *
  * `onAuthStateChange` 를 구독하는 이유: 로그인·로그아웃한 뒤에도 이 버튼이
  * 저절로 바뀌어야 한다. 구독하지 않으면 새로고침해야 반영된다.
@@ -24,6 +24,7 @@ export function AuthButton() {
   // null = 아직 확인 중. 확인 전에 "로그인" 버튼을 보여 주면 이미 로그인한
   // 사용자에게 잠깐 잘못된 화면이 스친다.
   const [email, setEmail] = useState<string | null | undefined>(undefined);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
     // ⚠️ Supabase 키가 없으면 createClient() 가 예외를 던진다.
@@ -44,6 +45,8 @@ export function AuthButton() {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setEmail(session?.user.email ?? null);
+        // 로그인에 성공하면 패널이 저절로 닫혀야 한다.
+        if (session) setPanelOpen(false);
       },
     );
 
@@ -55,19 +58,25 @@ export function AuthButton() {
     return <div className="h-8" />;
   }
 
-  return email ? (
-    <div className="flex items-center gap-4 text-sm">
-      <span className="text-muted-foreground">{email}</span>
-      <LogoutButton />
-    </div>
-  ) : (
-    <div className="flex gap-2">
-      <Button asChild size="sm" variant="outline">
-        <Link href="/auth/login">로그인</Link>
+  if (email) {
+    return (
+      <div className="flex items-center gap-3 text-sm">
+        {/* 좁은 화면에서는 주소가 헤더를 밀어내므로 감춘다. */}
+        <span className="hidden max-w-[12rem] truncate text-muted-foreground sm:block">
+          {email}
+        </span>
+        <LogoutButton />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Button size="sm" onClick={() => setPanelOpen(true)}>
+        로그인
       </Button>
-      <Button asChild size="sm" variant="default">
-        <Link href="/auth/sign-up">회원가입</Link>
-      </Button>
-    </div>
+
+      {panelOpen && <AuthPanel onClose={() => setPanelOpen(false)} />}
+    </>
   );
 }
