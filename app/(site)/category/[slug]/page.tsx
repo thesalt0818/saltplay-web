@@ -33,7 +33,7 @@ export default async function CategoryPage({ params }: Props) {
   const category = CATEGORIES.find((c) => c.slug === slug);
   if (!category) notFound();
 
-  const games = gamesInCategory(category, getGames("all"));
+  const games = gamesInCategory(category, await getGames("all"));
 
   return (
     <div>

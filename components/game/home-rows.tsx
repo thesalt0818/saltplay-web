@@ -9,8 +9,8 @@ import { GameRow } from "./game-row";
  * 줄 목록을 들고 있으면 한쪽만 고치는 실수가 나므로 여기 한 곳에 둔다.
  * 게임을 거르는 것은 `getGames(audience)` 안에서만 일어난다.
  */
-export function HomeRows({ audience }: { audience: Audience }) {
-  const games = getGames(audience);
+export async function HomeRows({ audience }: { audience: Audience }) {
+  const games = await getGames(audience);
 
   const rows = HOME_ROWS.map((row) => ({
     row,

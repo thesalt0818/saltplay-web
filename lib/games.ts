@@ -1,21 +1,29 @@
 import rawCatalog from "@/data/games.json";
+import { createStaticClient } from "./supabase/static";
 import { asset } from "./site";
 
 /**
  * 게임 카탈로그.
  *
- * ## 지금은 파일에서 읽는다
+ * ## Supabase 를 먼저 보고, 안 되면 파일을 쓴다
  *
- * 데이터의 출처는 `data/games.json` 이다. Flutter 앱이 읽는 것과 **같은 형식**이고
- * 실제로 앱의 `assets/data/games.json` 을 복사해 온 것이다.
+ * 앱이 원격 `games.json` 을 읽고 실패하면 내장 사본으로 되돌아가는 것과 같은 방식이다.
  *
- * 나중에 Supabase 로 옮길 때는 이 파일의 `loadGames()` 안쪽만 바꾸면 된다.
- * 화면 코드는 `Game` 타입만 알고 있으므로 손댈 필요가 없다 — 그러라고 나눠 놓았다.
+ * 1. `NEXT_PUBLIC_SUPABASE_*` 가 있으면 `games` 테이블에서 읽는다
+ * 2. 키가 없거나, 오류가 나거나, 결과가 비어 있으면 `data/games.json` 으로 되돌아간다
+ *
+ * **되돌아가는 길이 반드시 있어야 한다.** 무료 Supabase 프로젝트는 1주일 동안
+ * 쓰지 않으면 일시정지되는데, 그 상태로 배포가 돌면 게임이 하나도 없는 사이트가
+ * 올라간다. 빌드는 성공하고 사이트만 비는 종류의 사고다.
  *
  * ## 빌드할 때 한 번만 읽힌다
  *
  * 정적 배포라 이 목록은 빌드 시점에 HTML 로 굳는다. 게임을 추가하면 다시 배포해야
  * 사이트에 나온다(CLAUDE.md 9절).
+ *
+ * ## 화면 코드는 이 파일만 알면 된다
+ *
+ * 출처가 파일이든 DB 든 밖에서는 `Game` 타입만 보인다. 그러라고 나눠 놓았다.
  */
 
 export type Audience = "all" | "adult";
@@ -107,9 +115,8 @@ function parseGame(raw: unknown): Game | null {
   };
 }
 
-/** 카탈로그 전체. 중복 id 는 처음 것만 남긴다. */
-function loadGames(): Game[] {
-  const list = (rawCatalog as { games?: unknown[] }).games;
+/** 여러 건을 정리한다. 중복 id 는 처음 것만 남긴다. */
+function parseList(list: unknown): Game[] {
   if (!Array.isArray(list)) return [];
 
   const seen = new Set<string>();
@@ -125,8 +132,60 @@ function loadGames(): Game[] {
   return games;
 }
 
-/** 파일을 여러 번 읽지 않도록 한 번만 만들어 둔다. */
-const ALL_GAMES = loadGames();
+/** 앱에서 가져온 파일. Supabase 를 못 읽었을 때 쓰는 사본이다. */
+function loadFromFile(): Game[] {
+  return parseList((rawCatalog as { games?: unknown[] }).games);
+}
+
+/**
+ * Supabase 의 `games` 테이블에서 읽는다. 못 읽으면 null.
+ *
+ * ⚠️ **`status = 'published'` 조건을 빼면 안 된다.** 초안으로 넣어 둔 게임이
+ * 사이트에 올라가고 검색엔진에 잡히면 되돌리기 어렵다.
+ * (DB 쪽 RLS 정책에도 같은 조건이 걸려 있지만, 한쪽만 믿지 않는다.)
+ */
+async function loadFromSupabase(): Promise<Game[] | null> {
+  const supabase = createStaticClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("games")
+    .select("*")
+    .eq("status", "published")
+    .order("sort_order", { ascending: true });
+
+  if (error) {
+    // 빌드를 멈추지는 않는다. 대신 로그에 남겨서 왜 파일로 되돌아갔는지 알 수 있게 한다.
+    console.warn(
+      `[games] Supabase 를 읽지 못해 data/games.json 으로 되돌아갑니다: ${error.message}`,
+    );
+    return null;
+  }
+
+  const games = parseList(data);
+  if (games.length === 0) {
+    console.warn(
+      "[games] Supabase 에서 공개된 게임을 찾지 못해 data/games.json 으로 되돌아갑니다.",
+    );
+    return null;
+  }
+  return games;
+}
+
+/**
+ * 카탈로그를 한 번만 읽어 두고 재사용한다.
+ *
+ * 페이지마다 부르면 빌드 중에 DB 요청이 수십 번 나간다. 약속(Promise)을 저장하므로
+ * 동시에 여러 번 불려도 요청은 한 번뿐이다.
+ */
+let catalogPromise: Promise<Game[]> | null = null;
+
+function catalog(): Promise<Game[]> {
+  catalogPromise ??= loadFromSupabase().then(
+    (games) => games ?? loadFromFile(),
+  );
+  return catalogPromise;
+}
 
 /* ──────────────────────────────── 조회 ─────────────────────────────────── */
 
@@ -136,17 +195,17 @@ const ALL_GAMES = loadGames();
  * ⚠️ **이용 등급을 거르는 자리는 여기 하나뿐이다.** 화면마다 따로 거르면 한 곳만
  * 빠뜨렸을 때 성인용이 전체이용가 화면에 섞인다.
  */
-export function getGames(audience: Audience = "all"): Game[] {
-  return ALL_GAMES.filter((game) => game.audience === audience);
+export async function getGames(audience: Audience = "all"): Promise<Game[]> {
+  return (await catalog()).filter((game) => game.audience === audience);
 }
 
-export function getGame(id: string): Game | undefined {
-  return ALL_GAMES.find((game) => game.id === id);
+export async function getGame(id: string): Promise<Game | undefined> {
+  return (await catalog()).find((game) => game.id === id);
 }
 
 /** 정적 페이지를 미리 만들 주소 목록(`generateStaticParams` 용). */
-export function getAllGameIds(): string[] {
-  return ALL_GAMES.map((game) => game.id);
+export async function getAllGameIds(): Promise<string[]> {
+  return (await catalog()).map((game) => game.id);
 }
 
 export function hasTag(game: Game, tag: string): boolean {

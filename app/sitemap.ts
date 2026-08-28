@@ -15,8 +15,8 @@ import { siteUrl } from "@/lib/utils";
  * 성인용 게임은 넣지 않는다.
  * 검색 결과·마이페이지처럼 색인할 이유가 없는 페이지도 넣지 않는다.
  */
-export default function sitemap(): MetadataRoute.Sitemap {
-  const games = getGames("all");
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const games = await getGames("all");
 
   return [
     {

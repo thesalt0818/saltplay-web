@@ -15,8 +15,8 @@ type Props = { params: Promise<{ slug: string }> };
  * 정적 배포에는 서버가 없으므로 **여기 없는 게임은 페이지 자체가 존재하지 않는다.**
  * 게임을 추가하면 다시 빌드해야 하는 이유가 이것이다.
  */
-export function generateStaticParams() {
-  return getAllGameIds().map((slug) => ({ slug }));
+export async function generateStaticParams() {
+  return (await getAllGameIds()).map((slug) => ({ slug }));
 }
 
 /**
@@ -27,7 +27,7 @@ export function generateStaticParams() {
  */
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const game = getGame(slug);
+  const game = await getGame(slug);
 
   if (!game) return { title: "게임을 찾을 수 없습니다" };
 
@@ -61,7 +61,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GamePage({ params }: Props) {
   const { slug } = await params;
-  const game = getGame(slug);
+  const game = await getGame(slug);
 
   // 빌드 때 만들지 않은 주소로 들어온 경우. 정적 배포에서는 404.html 이 나간다.
   if (!game) notFound();
@@ -70,7 +70,7 @@ export default async function GamePage({ params }: Props) {
   const image = game.thumbnail ? siteUrl(`/${game.thumbnail}.png`) : undefined;
 
   // 같은 태그를 가진 다른 게임 — 시안 오른쪽의 '다음 게임 플레이' 자리다.
-  const related = getGames(game.audience)
+  const related = (await getGames(game.audience))
     .filter((other) => other.id !== game.id)
     .filter((other) => other.tags.some((tag) => hasTag(game, tag)))
     .slice(0, 8);

@@ -212,16 +212,34 @@ HTML5 게임 포털 웹사이트. CrazyGames 형태.
 
 ## 5. 데이터 구조
 
-### ⚠️ 지금 데이터는 Supabase 가 아니라 파일에서 온다
+### 데이터는 "Supabase 먼저, 안 되면 파일"
 
-현재 웹의 게임 목록은 **`data/games.json`** 이다. 앱의 `assets/data/games.json` 을
-복사해 온 것이고 형식이 같다. 읽고 검증하는 코드는 **`lib/games.ts`** 한 곳에 있다.
+출입구는 **`lib/games.ts`** 한 곳이다. 화면 코드는 `Game` 타입만 알면 되고
+출처가 어디인지 신경 쓰지 않는다.
 
-Supabase 로 옮길 때는 `lib/games.ts` 의 `loadGames()` 안쪽만 바꾼다.
-화면 코드는 `Game` 타입만 알고 있으므로 손댈 필요가 없다 — 그러라고 나눠 놓았다.
-아래 테이블 설계는 그때 쓸 목표다.
+1. `NEXT_PUBLIC_SUPABASE_*` 가 있으면 `games` 테이블에서 읽는다
+   (`lib/supabase/static.ts` — 쿠키를 쓰지 않는 빌드 전용 클라이언트)
+2. 키가 없거나 · 오류가 나거나 · 결과가 비어 있으면 **`data/games.json`** 으로 되돌아간다
 
-### Supabase 테이블 (웹·앱 공용 백엔드 — 목표)
+앱이 원격 `games.json` 을 읽고 실패하면 내장 사본을 쓰는 것과 같은 방식이다.
+
+⚠️ **되돌아가는 길을 없애지 말 것.** 무료 Supabase 프로젝트는 1주일 동안 쓰지 않으면
+일시정지된다. 그 상태로 배포가 돌면 **빌드는 성공하는데 게임이 하나도 없는 사이트**가
+올라간다. 폴백이 그걸 막는다. 어느 쪽을 썼는지는 빌드 로그의 `[games]` 줄에 남는다.
+
+⚠️ **사본이 셋이다.** `data/games.json` · 앱의 `assets/data/games.json` · Supabase.
+한쪽을 고치면 나머지도 맞춰야 앱과 웹의 목록이 어긋나지 않는다.
+
+**조회 함수는 전부 비동기다** (`await getGames()` / `await getGame()`).
+브라우저에서 도는 컴포넌트는 DB 에 접근할 수 없으므로, 서버 컴포넌트가 목록을
+읽어 `props` 로 내려 준다 (`search/page.tsx` → `SearchResults` 가 그 예다).
+
+### 테이블 만들기
+
+**`supabase/schema.sql`** 을 Supabase 대시보드 → SQL Editor 에 붙여넣고 Run.
+테이블 · RLS 정책 · 초기 데이터가 한 번에 들어간다. 여러 번 실행해도 안전하다.
+
+### Supabase 테이블
 
 | 테이블 | 내용 |
 |---|---|
@@ -415,7 +433,8 @@ npm run lint
 - [ ] **첫 배포** — 저장소 만들고 푸시 (9절 "처음 한 번만 하는 일")
 - [x] 이용 등급 전환 UI (`/` ↔ `/adult`)
 - [ ] **연령 확인** — 지금은 그냥 눌러서 바뀐다. 공개 전에 반드시 붙일 것
-- [ ] Supabase 스키마 확정 → `lib/games.ts` 의 `loadGames()` 를 DB 로 교체
+- [x] Supabase 연결 준비 — `supabase/schema.sql`, 빌드 전용 클라이언트, JSON 폴백
+- [ ] **Supabase 프로젝트 만들고 `.env.local` · GitHub Secrets 채우기** (사람이 해야 함)
 - [ ] 즐겨찾기 · 최근 플레이 (브라우저 쪽 로그인 연동)
 - [ ] 광고 자리 (`ad_revenues`)
 
