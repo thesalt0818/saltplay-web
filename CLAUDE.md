@@ -465,6 +465,12 @@ images: { unoptimized: true },
 2. `window.location.origin` 은 `https://thesalt0818.github.io` 까지만 준다 —
    저장소 이름이 빠진다. 바깥에 내보낼 주소는 **`lib/utils.ts` 의 `siteUrl()`** 을 쓴다
    (회원가입 확인 메일 링크에서 실제로 걸렸던 자리다).
+3. **`generateMetadata` 안에서는 `asset()` 을 쓰지 않는다.**
+   `metadataBase` 에 이미 basePath 가 들어 있어서 Next 가 그 뒤에 경로를 이어 붙인다.
+   `asset()` 이 한 번 더 붙이면 `.../saltplay-web/saltplay-web/...` 이 되어 미리보기
+   그림이 404 가 된다. 여기서는 절대 주소(`siteUrl()`)를 쓴다.
+   **빌드도 배포도 통과하고 링크를 공유해 봐야 티가 나는 종류다** — 실제로 첫 배포
+   뒤에 발견했다. (파비콘 `icons` 는 이 규칙과 무관하다. 거기서는 `asset()` 이 맞다.)
 
 나머지:
 
