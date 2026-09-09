@@ -44,6 +44,17 @@
       "accent": "#5B7FDE",
       "tags": ["idle", "simulation", "casual"]
     },
+    {
+      "id": "chinesemerge",
+      "title": "Chinese Merge",
+      "description": "중식 요리 2048 머지 퍼즐",
+      "url": "https://thesalt0818.github.io/chinesemerge/",
+      "version": "20260909",
+      "orientation": "portrait",
+      "thumbnail": "gameicon/chinesemerge_icon",
+      "accent": "#FF2D5C",
+      "tags": ["hot", "puzzle", "casual"]
+    },
 
     {
       "id": "adult01",
