@@ -1,6 +1,17 @@
 {
   "games": [
     {
+      "id": "piggyrush",
+      "title": "Piggy Rush",
+      "description": "pig rush game",
+      "url": "https://thesalt0818.github.io/piggyrush",
+      "version": "20260917",
+      "orientation": "landscape",
+      "thumbnail": "https://thesalt0818.github.io/saltplay-web/gameicon/piggy_icon_long.png",
+      "accent": "#FF2D5C",
+      "tags": ["hot", "puzzle", "casual"]
+    },
+    {
       "id": "apexholdem",
       "title": "Apex Holdem",
       "description": "texas Holdem game",
