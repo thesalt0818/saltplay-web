@@ -157,5 +157,5 @@ export default async function GamePage({ params }: Props) {
 const ORIENTATION_LABEL = {
   portrait: "세로",
   landscape: "가로",
-  sensor: "기기에 맞춤",
+  sensor: "가로·세로 모두",
 } as const;

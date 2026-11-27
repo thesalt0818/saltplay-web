@@ -260,6 +260,10 @@ values
    'https://thesalt0818.github.io/catguardians/', '20260821', 'portrait',
    'gameicon/catguardians_icon', '#5B7FDE', '{idle,simulation,casual}', 'all', 'published', 4),
 
+  ('chinesemerge', 'Chinese Merge', '중식 요리 2048 머지 퍼즐',
+   'https://thesalt0818.github.io/chinesemerge/', '20260909', 'portrait',
+   'gameicon/chinesemerge_icon', '#FF2D5C', '{hot,puzzle,casual}', 'all', 'published', 5),
+
   -- ⚠️ 성인용 4개는 주소가 아직 임시다. 실제 게임 주소로 바꿔야 한다.
   ('adult01', '섹시 블리드', '주소가 아직 임시입니다 — 실제 게임 주소로 바꿔 주세요',
    'https://thesalt0818.github.io/saltplay/', '', 'portrait',

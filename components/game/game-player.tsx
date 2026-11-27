@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  Home,
   Maximize,
-  Minimize,
   Play,
   Smartphone,
   ThumbsDown,
@@ -67,8 +65,18 @@ export function GamePlayer({ game }: { game: Game }) {
   /** 지금 기기가 세로로 들려 있는가. */
   const [viewportPortrait, setViewportPortrait] = useState(true);
 
-  // 가로 게임인지. 'sensor'(기기에 맡김)는 가로로 본다 — 대부분 가로가 기본이다.
-  const landscape = game.orientation !== "portrait";
+  /**
+   * 가로·세로를 둘 다 지원하는 게임인가(`orientation: "sensor"`).
+   * 이런 게임은 방향을 잠그지 않고, 사용자가 폰을 돌리는 대로 따라간다.
+   * 앱(`game_screen.dart`)도 `sensor` 면 회전을 잠그지 않는다 — 같은 뜻이다.
+   */
+  const free = game.orientation === "sensor";
+
+  /**
+   * 지금 가로로 그려야 하는가. 메뉴 띠 위치(위/왼쪽)와 플레이어 비율이 이걸 따른다.
+   * 고정 게임은 정해진 방향, `sensor` 게임은 **지금 기기 방향**을 따른다.
+   */
+  const landscape = free ? !viewportPortrait : game.orientation === "landscape";
 
   // 기기 종류와 지금 방향을 지켜본다.
   // 서버에서는 알 수 없으므로 화면이 뜬 뒤에 읽는다.
@@ -101,11 +109,16 @@ export function GamePlayer({ game }: { game: Game }) {
    * - 전체화면(`immersive`)일 때만. 평소 페이지에서 돌리면 글이 다 누워 버린다.
    * - 손가락 기기에서만. PC 창은 대부분 가로라, 세로 게임을 열 때마다 화면 전체가
    *   돌아가 버린다.
+   * - `sensor` 게임은 돌리지 않는다. 기기를 따라 도는 것이 원래 원하는 동작이다.
    */
   const rotated =
+    !free &&
     immersive &&
     touchDevice &&
     (landscape ? viewportPortrait : !viewportPortrait);
+
+  /** 전체화면인가(브라우저 방식이든 우리 방식이든). 이때 메뉴 띠가 생긴다. */
+  const fullscreen = isFullscreen || immersive;
 
   /** 게임을 실제로 띄운다. '계속 플레이하기'에 쌓이는 시점도 여기다. */
   const start = useCallback(() => {
@@ -248,6 +261,9 @@ export function GamePlayer({ game }: { game: Game }) {
       return;
     }
 
+    // 가로·세로 둘 다 되는 게임은 잠그지 않는다 — 사용자가 돌리는 대로 따라간다.
+    if (free) return;
+
     // 방향 고정은 되면 좋고 안 되면 그만이다. 예외를 그냥 삼킨다.
     try {
       const orientation = screen.orientation as ScreenOrientation & {
@@ -257,7 +273,7 @@ export function GamePlayer({ game }: { game: Game }) {
     } catch {
       /* 지원하지 않는 기기 — 무시한다 */
     }
-  }, [landscape]);
+  }, [free, landscape]);
 
   const exitFullscreen = useCallback(async () => {
     setImmersive(false);
@@ -352,61 +368,146 @@ export function GamePlayer({ game }: { game: Game }) {
               : undefined
           }
         >
-          {started ? (
-            <iframe
-              ref={iframeRef}
-              src={playUrl(game)}
-              title={game.title}
-              onLoad={() => applyMute(muted)}
-              className="absolute inset-0 h-full w-full border-0"
-              // autoplay 가 없으면 화면을 한 번 건드리기 전까지 소리가 나지 않는다.
-              allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"
-              // 게임은 남의 사이트다. 최소 권한만 준다.
-              sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups"
-            />
-          ) : (
-            <PlayPoster
-              game={game}
-              onStart={() => {
-                start();
+          {/*
+            게임이 그려지는 자리.
+            전체화면일 때는 메뉴 띠만큼 비켜 선다 — 세로 게임은 위, 가로 게임은 왼쪽.
+            ⚠️ 이 상자는 **늘 같은 자리에 둔다.** 전체화면 여부에 따라 iframe 을
+            다른 상자로 옮기면 React 가 iframe 을 새로 만들어 게임이 처음부터
+            다시 로드된다(진행이 날아간다). 그래서 위치(className)만 바꾼다.
+          */}
+          <div
+            className={cn(
+              "absolute",
+              !fullscreen && "inset-0",
+              fullscreen &&
+                (landscape
+                  ? "inset-y-0 left-14 right-0"
+                  : "inset-x-0 bottom-0 top-11"),
+            )}
+          >
+            {started ? (
+              <iframe
+                ref={iframeRef}
+                src={playUrl(game)}
+                title={game.title}
+                onLoad={() => applyMute(muted)}
+                className="absolute inset-0 h-full w-full border-0"
+                // autoplay 가 없으면 화면을 한 번 건드리기 전까지 소리가 나지 않는다.
+                allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"
+                // 게임은 남의 사이트다. 최소 권한만 준다.
+                sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups"
+              />
+            ) : (
+              <PlayPoster
+                game={game}
+                onStart={() => {
+                  start();
 
-                // 폰에서만 전체화면으로 들어간다. PC 는 창이 이미 넓어서
-                // 플레이어 안에서 그대로 하는 편이 낫다.
-                //
-                // ⚠️ 반드시 이 자리(누른 순간)에서 불러야 한다. 나중으로 미루면
-                // '사용자가 누른 것'으로 쳐 주지 않아 전체화면이 조용히 거부된다.
-                if (window.matchMedia("(pointer: coarse)").matches) {
-                  enterFullscreen();
-                }
-              }}
-            />
-          )}
+                  // 폰에서만 전체화면으로 들어간다. PC 는 창이 이미 넓어서
+                  // 플레이어 안에서 그대로 하는 편이 낫다.
+                  //
+                  // ⚠️ 반드시 이 자리(누른 순간)에서 불러야 한다. 나중으로 미루면
+                  // '사용자가 누른 것'으로 쳐 주지 않아 전체화면이 조용히 거부된다.
+                  if (window.matchMedia("(pointer: coarse)").matches) {
+                    enterFullscreen();
+                  }
+                }}
+              />
+            )}
+          </div>
 
           {/*
-            전체화면에서 빠져나오는 버튼.
+            전체화면 메뉴 띠 — 세로 게임은 위, 가로 게임은 왼쪽.
+
+            예전에는 버튼을 게임 위에 띄웠더니 게임의 UI(코인·설정 버튼 등)를
+            가렸다. 그래서 띠만큼 게임 자리를 비워 두고 거기에 버튼을 둔다.
+
             ⚠️ **반드시 플레이어 안에 있어야 한다.** 전체화면일 때는 이 상자만
             화면에 보이므로, 아래 조작 줄에 두면 나가는 방법이 사라진다.
-            폰에는 Esc 키가 없어서 이 버튼이 유일한 출구다.
-          */}
-          {(isFullscreen || immersive) && (
-            <div className="absolute left-3 top-3 z-10 flex gap-2">
-              <OverlayButton onClick={exitFullscreen}>
-                <Minimize className="h-4 w-4" aria-hidden />
-                작게 보기
-              </OverlayButton>
+            폰에는 Esc 키가 없어서 이 띠가 유일한 출구다.
 
+            돌려 그릴 때(`rotated`)도 띠는 상자와 함께 돌아가므로 늘 게임의
+            위(또는 왼쪽)에 붙어 있다.
+          */}
+          {fullscreen && (
+            <div
+              className={cn(
+                "absolute flex justify-between bg-black p-1.5",
+                landscape
+                  ? "inset-y-0 left-0 w-14 flex-col items-center"
+                  : "inset-x-0 top-0 h-11 items-center",
+              )}
+            >
               {/* 게임을 끝내고 목록으로 돌아가는 길. 전체화면에서는 사이트의
                   메뉴가 하나도 안 보이므로 이 버튼이 없으면 갇힌 느낌이 된다. */}
-              <OverlayButton onClick={quitToHome}>
-                <Home className="h-4 w-4" aria-hidden />
-                게임 종료
-              </OverlayButton>
+              <button
+                type="button"
+                onClick={quitToHome}
+                className={cn(
+                  "flex items-center justify-center rounded-md bg-white/40 font-bold",
+                  "text-white transition hover:bg-white/50",
+                  landscape
+                    ? "w-11 flex-col gap-1.5 py-2 text-base"
+                    : "h-full gap-1 px-2.5 text-sm",
+                )}
+              >
+                <X
+                  className={landscape ? "h-7 w-7" : "h-5 w-5"}
+                  strokeWidth={3.5}
+                  aria-hidden
+                />
+                {/* 왼쪽 띠에서는 글씨를 눕혀 **아래에서 위로** 읽히게 쓴다.
+                    vertical-rl 만 쓰면 위에서 아래로 읽혀서 180° 더 돌린다.
+                    (같은 일을 하는 sideways-lr 은 구형 iOS 사파리가 몰라서 안 쓴다.) */}
+                <span
+                  className={cn(
+                    landscape &&
+                      "rotate-180 [writing-mode:vertical-rl] [text-orientation:sideways]",
+                  )}
+                >
+                  종료
+                </span>
+              </button>
+
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  landscape && "flex-col-reverse",
+                )}
+              >
+                {/* 흰 테두리 알약. 종료(꽉 찬 회색)와 모양을 달리해 잘못 누르지 않게 한다. */}
+                <button
+                  type="button"
+                  onClick={exitFullscreen}
+                  className={cn(
+                    "flex items-center justify-center rounded-full border-2 border-white",
+                    "text-sm font-bold text-white transition hover:bg-white/10",
+                    landscape
+                      ? "w-10 py-3 rotate-180 [writing-mode:vertical-rl] [text-orientation:sideways]"
+                      : "h-8 px-3",
+                  )}
+                >
+                  작게 보기
+                </button>
+                <BarButton
+                  label={muted ? "소리 켜기" : "소리 끄기"}
+                  onClick={toggleMute}
+                  active={muted}
+                >
+                  {muted ? (
+                    <VolumeX className="h-5 w-5" />
+                  ) : (
+                    <Volume2 className="h-5 w-5" />
+                  )}
+                </BarButton>
+              </div>
             </div>
           )}
 
           {/* 세로로 든 폰에서 가로 게임을 열었을 때만 나온다.
-            CSS 조건만으로 판단하므로 자바스크립트가 관여하지 않는다. */}
-          {landscape && started && (
+            CSS 조건만으로 판단하므로 자바스크립트가 관여하지 않는다.
+            전체화면에서는 게임을 돌려 그려 주므로 띄울 필요가 없다. */}
+          {landscape && !free && started && !fullscreen && (
             <div className="pointer-events-none absolute inset-x-0 bottom-3 hidden justify-center portrait:touch:flex">
               <p className="flex items-center gap-2 rounded-full bg-black/80 px-4 py-2 text-xs text-white">
                 <Smartphone className="h-4 w-4" aria-hidden />
@@ -493,24 +594,31 @@ function PlayPoster({ game, onStart }: { game: Game; onStart: () => void }) {
   );
 }
 
-/** 전체화면 위에 떠 있는 버튼. 게임 화면 위에서도 읽히도록 어둡게 깐다. */
-function OverlayButton({
+/** 전체화면 메뉴 띠의 아이콘 버튼. */
+function BarButton({
+  label,
   onClick,
   children,
+  active,
 }: {
+  label: string;
   onClick: () => void;
   children: React.ReactNode;
+  active?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={label}
+      aria-pressed={active}
       className={cn(
-        "flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-2",
-        "text-sm font-bold text-white backdrop-blur transition hover:bg-black/85",
+        "grid h-8 w-8 place-items-center rounded-md text-white transition hover:bg-white/10",
+        active && "text-primary",
       )}
     >
       {children}
+      <span className="sr-only">{label}</span>
     </button>
   );
 }
